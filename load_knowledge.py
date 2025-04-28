@@ -14,7 +14,11 @@ knowledge_df = pd.read_csv("knowledge_for_rag.csv")
 chroma_client = chromadb.Client(
     chromadb.config.Settings(
         chroma_db_impl="postgres",
-        postgres_connection_string=os.getenv("DATABASE_URL")
+        postgres_host=os.getenv("POSTGRES_HOST"),
+        postgres_port=int(os.getenv("POSTGRES_PORT")),
+        postgres_user=os.getenv("POSTGRES_USER"),
+        postgres_password=os.getenv("POSTGRES_PASSWORD"),
+        postgres_database=os.getenv("POSTGRES_DB")
     )
 )
 
