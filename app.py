@@ -33,25 +33,17 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # Default to gpt-4o if not set
 OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
 
-# Setup Chroma client (File-based backend)
-chroma_client = chromadb.Client(
-    Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory="./chroma_data"  # Directory to store Chroma data
-    )
-)
+# Setup Chroma client (New architecture)
+chroma_client = chromadb.PersistentClient(path="./chroma_data")  
 
 # Set embedding function
 embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
-    api_key=OPENAI_API_KEY,
-    model_name=OPENAI_EMBEDDING_MODEL
+    api_key=os.getenv("OPENAI_API_KEY"),
+    model_name=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
 )
 
-# Initialize or retrieve the 'rag' collection
-try:
-    rag_collection = chroma_client.get_collection(name="rag", embedding_function=embedding_fn)
-except:
-    rag_collection = chroma_client.create_collection(name="rag", embedding_function=embedding_fn)
+# Create or get existing collection
+knowledge_collection = chroma_client.get_or_create_collection(name="rag", embedding_function=embedding_fn)
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=OPENAI_API_KEY)

@@ -10,13 +10,8 @@ load_dotenv()
 # Load knowledge data
 knowledge_df = pd.read_csv("knowledge_for_rag.csv")
 
-# Setup Chroma client (File-based backend)
-chroma_client = chromadb.Client(
-    chromadb.config.Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory="./chroma_data"  # Directory to store Chroma data
-    )
-)
+# Setup Chroma client (New architecture)
+chroma_client = chromadb.PersistentClient(path="./chroma_data")  
 
 # Set embedding function
 embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
@@ -25,10 +20,7 @@ embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
 )
 
 # Create or get existing collection
-try:
-    knowledge_collection = chroma_client.get_collection(name="rag", embedding_function=embedding_fn)
-except:
-    knowledge_collection = chroma_client.create_collection(name="rag", embedding_function=embedding_fn)
+knowledge_collection = chroma_client.get_or_create_collection(name="rag", embedding_function=embedding_fn)
 
 # Prepare documents, metadatas, and ids
 documents = knowledge_df['text'].tolist()
