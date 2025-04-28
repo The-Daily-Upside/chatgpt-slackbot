@@ -34,7 +34,4 @@ knowledge_collection.add(
     ids=ids
 )
 
-# Persist the data to disk
-chroma_client.persist()
-
 print(f"✅ Successfully added {len(documents)} knowledge entries to Chroma!")
