@@ -9,7 +9,6 @@ The ChatGPT Slackbot is an internal tool developed for **[The Daily Upside](http
 - **Slack Integration**: Seamlessly interact with ChatGPT in Slack channels and direct messages.
 - **Threaded Conversations**: Keeps messages and responses in a Slack thread for better organization and context.
 - **Message Persistence**: Stores messages and responses in a managed database, allowing the bot to use previous messages in the thread for context in subsequent responses.
-- **Company-Specific Customization**: Designed to meet the unique needs of your organization.
 - **Database Integration**: Stores configurations, logs, and conversation history in a managed database.
 
 ## Deployment Instructions
@@ -19,6 +18,7 @@ The ChatGPT Slackbot is an internal tool developed for **[The Daily Upside](http
 - Access to your Slack Bot Token and OpenAI API Key.
 - A PostgreSQL database.
 - A server that can run a Flask app.
+- A PostgreSQL database.
 
 ### Setup Steps
 
@@ -47,14 +47,41 @@ pip install -r requirements.txt
 Create a `.env` file from the `.env.example` with the following variables:
 
 ```plaintext
+SLACK_BOT_TOKEN=
+SLACK_SIGNING_SECRET=
+OPENAI_API_KEY=
+DATABASE_URL=
+```
+
+Leave the placeholders empty for now. You will configure these after setting up your Slack app.
+
+#### 5. Start the Application
+
+Start the Flask app on your server. This step is necessary because Slack's event subscription requires the app to be running to verify the challenge request.
+
+```bash
+python app.py
+```
+
+#### 6. Create Your Slack App
+
+1. Go to the [Slack API](https://api.slack.com/apps) and create a new app.
+2. Under **Event Subscriptions**, set the **Request URL** to your server's `/events` endpoint (e.g., `https://your-domain.com/events`).
+3. Slack will send a challenge request to verify the endpoint. Ensure the app is running so it can respond to the challenge.
+4. Once the challenge is verified, you can proceed to configure the app's permissions and tokens.
+
+#### 7. Configure Tokens in `.env`
+
+After creating the Slack app, update the `.env` file with the following values:
+
+```plaintext
 SLACK_BOT_TOKEN=your-slack-bot-token
+SLACK_SIGNING_SECRET=your-slack-signing-secret
 OPENAI_API_KEY=your-openai-api-key
 DATABASE_URL=your-database-url
 ```
 
-Replace placeholders with your specific credentials.
-
-#### 5. Start the Application
+Save the file and restart the application.
 
 ```bash
 python app.py
@@ -91,7 +118,7 @@ To set up your Slack app, you can use the following manifest file. This manifest
     },
     "settings": {
         "event_subscriptions": {
-            "request_url": "https://chatgptbot.yourserver.com/events",
+            "request_url": "https://your-domain.com/events",
             "bot_events": [
                 "app_mention",
                 "message.im"
@@ -104,7 +131,7 @@ To set up your Slack app, you can use the following manifest file. This manifest
 }
 ```
 
-Replace `https://chatgptbot.yourserver.com/events` with your actual server URL.
+Replace `https://your-domain.com/events` with your actual server URL.
 
 ## Usage
 
