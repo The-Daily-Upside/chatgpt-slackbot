@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -90,6 +91,13 @@ def preprocess_for_slack(text):
     # Replace Markdown-style bold with Slack-style bold
     text = text.replace("**", "*")  # Convert **bold** to *bold*
     text = text.replace("__", "_")  # Convert __italic__ to _italic_
+
+    # Replace Markdown headings with bold text
+    text = text.replace("# ", "*").replace("## ", "*").replace("### ", "*")
+
+    # Replace Markdown links with Slack-style links
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"<\2|\1>", text)
+
     return text
 
 # Initialize Slack app
