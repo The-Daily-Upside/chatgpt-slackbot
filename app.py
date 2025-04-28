@@ -167,30 +167,42 @@ def handle_message_events(event, client, logger):
             logger.info("Ignoring non-direct message event.")
             return
 
-        # Extract the channel and message text
+        # Extract the channel, user, and message text
         channel = event["channel"]
         user = event["user"]
         text = event.get("text", "").strip()
-        thread_ts = event.get("thread_ts")  # Check if the message is part of a thread
+        thread_ts = event.get("thread_ts") or event["ts"]  # Use thread_ts or start a new thread
         logger.info(f"Channel: {channel}, User: {user}, Text: {text}, Thread TS: {thread_ts}")
 
-        # Call OpenAI API
-        logger.info(f"Sending message to OpenAI: {text}")
+        # Store the user's message in the database
+        store_message(thread_ts, channel, user, text, "user")
+
+        # Retrieve thread history from the database
+        messages = get_thread_history(thread_ts)
+
+        # Add the current user message to the conversation
+        messages.append({"role": "user", "content": text})
+
+        # Call OpenAI API with the conversation history
+        logger.info(f"Sending message to OpenAI with context: {messages}")
         response = openai_client.responses.create(
             model=OPENAI_MODEL,
             instructions=OPENAI_INSTRUCTIONS,
-            input=text,
+            input=messages,
         )
 
         # Extract the response text
         gpt_response = response.output_text
         logger.info(f"Received response from OpenAI: {gpt_response}")
 
+        # Store the bot's response in the database
+        store_message(thread_ts, channel, client.auth_test()["user_id"], gpt_response, "assistant")
+
         # Send the response back to the Slack channel
         client.chat_postMessage(
             channel=channel,
             text=gpt_response,
-            thread_ts=thread_ts or event["ts"]  # Reply in the thread or start a new thread
+            thread_ts=thread_ts  # Reply in the thread
         )
         logger.info(f"Message sent successfully to channel {channel}")
 
