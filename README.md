@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ChatGPT Slackbot is an internal tool developed for **The Daily Upside**. This bot integrates OpenAI's ChatGPT with Slack, enabling your team to efficiently interact with AI-powered assistance directly within your Slack workspace. It is tailored for company-specific workflows and is deployed on DigitalOcean, leveraging a managed database for persistent storage and configuration.
+The ChatGPT Slackbot is an internal tool developed for **[The Daily Upside](https://www.thedailyupside.com)**. This bot integrates OpenAI's ChatGPT with Slack, enabling your team to efficiently interact with AI-powered assistance directly within your Slack workspace. It is tailored for company-specific workflows and is deployed on DigitalOcean, leveraging a managed database for persistent storage and configuration.
 
 ## Features
 
