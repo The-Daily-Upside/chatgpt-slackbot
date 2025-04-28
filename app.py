@@ -95,8 +95,8 @@ def preprocess_for_slack(text):
     # Replace Markdown headings with bold text
     text = re.sub(r"^#+\s*(.*)", r"*\1*", text, flags=re.MULTILINE)  # Convert # Heading to *Heading*
 
-    # Replace Markdown strikethrough with (strikethrough)
-    text = text.replace("~~", "(strikethrough)")
+    # Replace Markdown strikethrough with simulated strikethrough
+    text = re.sub(r"~~(.*?)~~", r"(strikethrough)\1(strikethrough)", text)
 
     # Replace Markdown links with Slack-style links
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"<\2|\1>", text)
