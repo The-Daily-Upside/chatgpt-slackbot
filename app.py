@@ -5,11 +5,9 @@ from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from dotenv import load_dotenv
 from openai import OpenAI
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import re
-from chromadb.config import Settings
 import chromadb
+from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 
 # Configure logging
@@ -32,26 +30,24 @@ SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
 BOT_NAME = os.getenv("BOT_NAME", "ChatGPTBot")
 PORT = int(os.getenv("PORT", 3000))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-DATABASE_URL = os.getenv("DATABASE_URL")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # Default to gpt-4o if not set
-OPENAI_INSTRUCTIONS = os.getenv("OPENAI_INSTRUCTIONS", "You are a helpful assistant.")  # Default instructions
 OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
 
-# Configure Chroma to use PostgreSQL as the backend
+# Setup Chroma client (File-based backend)
 chroma_client = chromadb.Client(
     Settings(
-        chroma_db_impl="postgres",
-        postgres_connection_string=DATABASE_URL
+        chroma_db_impl="duckdb+parquet",
+        persist_directory="./chroma_data"  # Directory to store Chroma data
     )
 )
 
-# Set embedding function (OpenAI Embedding)
+# Set embedding function
 embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
     api_key=OPENAI_API_KEY,
     model_name=OPENAI_EMBEDDING_MODEL
 )
 
-# Initialize or retrieve the 'examples' collection
+# Initialize or retrieve the 'rag' collection
 try:
     rag_collection = chroma_client.get_collection(name="rag", embedding_function=embedding_fn)
 except:
@@ -59,54 +55,6 @@ except:
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Connect to the database
-def get_db_connection():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-    return conn
-
-# Initialize the database
-def initialize_database():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS threads (
-        id SERIAL PRIMARY KEY,
-        thread_ts TEXT NOT NULL,
-        channel TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        message TEXT NOT NULL,
-        role TEXT NOT NULL, -- 'user' or 'assistant'
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-    conn.commit()
-    conn.close()
-
-# Call this function at the start of your app
-initialize_database()
-
-def store_message(thread_ts, channel, user_id, message, role):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    INSERT INTO threads (thread_ts, channel, user_id, message, role)
-    VALUES (%s, %s, %s, %s, %s)
-    """, (thread_ts, channel, user_id, message, role))
-    conn.commit()
-    conn.close()
-
-def get_thread_history(thread_ts):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-    SELECT message, role FROM threads
-    WHERE thread_ts = %s
-    ORDER BY created_at ASC
-    """, (thread_ts,))
-    messages = cursor.fetchall()
-    conn.close()
-    return [{"role": row["role"], "content": row["message"]} for row in messages]
 
 def preprocess_for_slack(text):
     """
@@ -172,8 +120,6 @@ def process_event(event, say, logger, is_direct_message=False):
             text = text.replace(f"<@{bot_user_id}>", "").strip()
             logger.info(f"Processed text after removing bot mention: {text}")
 
-        store_message(thread_ts, channel, user, text, "user")
-
         # Retrieve RAG context from Chroma
         rag_contexts = retrieve_rag_context(text, top_k=15)
         context_message = {
@@ -181,7 +127,7 @@ def process_event(event, say, logger, is_direct_message=False):
             "content": "Here are relevant examples to consider:\n\n" + "\n\n".join(rag_contexts)
         }
 
-        messages = [context_message] + get_thread_history(thread_ts)
+        messages = [context_message]
         messages.append({"role": "user", "content": text})
 
         logger.info(f"Sending message to OpenAI with context: {messages}")
@@ -195,9 +141,6 @@ def process_event(event, say, logger, is_direct_message=False):
         logger.info(f"Received response from OpenAI: {gpt_response}")
 
         gpt_response = preprocess_for_slack(gpt_response)
-
-        bot_user_id = app.client.auth_test()["user_id"]
-        store_message(thread_ts, channel, bot_user_id, gpt_response, "assistant")
 
         say(
             text=gpt_response,
@@ -218,7 +161,6 @@ def process_event(event, say, logger, is_direct_message=False):
         logger.error(f"Error processing event: {e}")
         say(text="Sorry, something went wrong.")
 
-# Event listener for app mentions
 @app.event("app_mention")
 def handle_app_mention_events(event, say, logger):
     logger.info("Handling app_mention event")
@@ -227,14 +169,10 @@ def handle_app_mention_events(event, say, logger):
 @app.event("message")
 def handle_message_events(event, say, logger):
     logger.info("Handling message event")
-    
-    # Filter for direct messages
     if event.get("channel_type") != "im":
         logger.info("Ignoring non-direct message event.")
         return
-
     process_event(event, say, logger, is_direct_message=True)
 
 if __name__ == "__main__":
-    # Run Flask app
     flask_app.run(host="0.0.0.0", port=PORT)

@@ -10,15 +10,11 @@ load_dotenv()
 # Load knowledge data
 knowledge_df = pd.read_csv("knowledge_for_rag.csv")
 
-# Setup Chroma client (Postgres backend)
+# Setup Chroma client (File-based backend)
 chroma_client = chromadb.Client(
     chromadb.config.Settings(
-        chroma_db_impl="postgres",
-        postgres_host=os.getenv("POSTGRES_HOST"),
-        postgres_port=int(os.getenv("POSTGRES_PORT")),
-        postgres_user=os.getenv("POSTGRES_USER"),
-        postgres_password=os.getenv("POSTGRES_PASSWORD"),
-        postgres_database=os.getenv("POSTGRES_DB")
+        chroma_db_impl="duckdb+parquet",
+        persist_directory="./chroma_data"  # Directory to store Chroma data
     )
 )
 
@@ -45,5 +41,8 @@ knowledge_collection.add(
     metadatas=metadatas,
     ids=ids
 )
+
+# Persist the data to disk
+chroma_client.persist()
 
 print(f"✅ Successfully added {len(documents)} knowledge entries to Chroma!")
