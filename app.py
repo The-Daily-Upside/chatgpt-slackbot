@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import re
 import chromadb
-from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 
 # Configure logging
@@ -71,7 +70,7 @@ def retrieve_rag_context(query_text, top_k=15):
     """
     Retrieve the top-k most relevant documents from Chroma.
     """
-    results = rag_collection.query(
+    results = knowledge_collection.query(
         query_texts=[query_text],
         n_results=top_k
     )
