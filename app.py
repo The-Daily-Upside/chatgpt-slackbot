@@ -102,113 +102,89 @@ def slack_events():
     # Handle other events
     return handler.handle(request)
 
+def process_event(event, client, logger, is_direct_message=False):
+    try:
+        logger.info(f"Processing event: {event}")
+
+        # Extract the channel, user, and message text
+        channel = event["channel"]
+        user = event["user"]
+        text = event.get("text", "").strip()
+        thread_ts = event.get("thread_ts") or event["ts"]  # Use thread_ts or start a new thread
+        logger.info(f"Channel: {channel}, User: {user}, Text: {text}, Thread TS: {thread_ts}")
+
+        # If it's not a direct message, remove the bot mention
+        if not is_direct_message:
+            bot_user_id = client.auth_test()["user_id"]
+            text = text.replace(f"<@{bot_user_id}>", "").strip()
+            logger.info(f"Processed text after removing bot mention: {text}")
+
+        # Store the user's message in the database
+        store_message(thread_ts, channel, user, text, "user")
+
+        # Retrieve thread history from the database
+        messages = get_thread_history(thread_ts)
+
+        # Add the current user message to the conversation
+        messages.append({"role": "user", "content": text})
+
+        # Call OpenAI API with the conversation history
+        logger.info(f"Sending message to OpenAI with context: {messages}")
+        response = openai_client.responses.create(
+            model=OPENAI_MODEL,
+            instructions=OPENAI_INSTRUCTIONS,
+            input=messages,
+        )
+
+        # Extract the response text
+        gpt_response = response.output_text
+        logger.info(f"Received response from OpenAI: {gpt_response}")
+
+        # Store the bot's response in the database
+        bot_user_id = client.auth_test()["user_id"]
+        store_message(thread_ts, channel, bot_user_id, gpt_response, "assistant")
+
+        # Format the response using Slack's Block Kit
+        formatted_response = {
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": gpt_response  # OpenAI's response as Markdown
+                    }
+                }
+            ]
+        }
+
+        # Send the formatted response back to the Slack channel
+        client.chat_postMessage(
+            channel=channel,
+            blocks=formatted_response["blocks"],  # Use the formatted blocks
+            thread_ts=thread_ts  # Reply in the thread
+        )
+        logger.info(f"Message sent successfully to channel {channel}")
+
+    except Exception as e:
+        logger.error(f"Error processing event: {e}")
+        client.chat_postMessage(channel=event["channel"], text="Sorry, something went wrong.")
+
 # Event listener for app mentions
 @app.event("app_mention")
 def handle_app_mention_events(event, client, logger):
-    try:
-        logger.info(f"Received app_mention event: {event}")
-        
-        # Extract the channel, user, and message text
-        channel = event["channel"]
-        user = event["user"]
-        text = event.get("text", "").strip()
-        thread_ts = event.get("thread_ts") or event["ts"]  # Use thread_ts or start a new thread
-        logger.info(f"Channel: {channel}, User: {user}, Text: {text}, Thread TS: {thread_ts}")
-
-        # Remove the bot mention from the text
-        bot_user_id = client.auth_test()["user_id"]
-        text = text.replace(f"<@{bot_user_id}>", "").strip()
-        logger.info(f"Processed text: {text}")
-
-        # Store the user's message in the database
-        store_message(thread_ts, channel, user, text, "user")
-
-        # Retrieve thread history from the database
-        messages = get_thread_history(thread_ts)
-
-        # Add the current user message to the conversation
-        messages.append({"role": "user", "content": text})
-
-        # Call OpenAI API with the conversation history
-        logger.info(f"Sending message to OpenAI with context: {messages}")
-        response = openai_client.responses.create(
-            model=OPENAI_MODEL,
-            instructions=OPENAI_INSTRUCTIONS,
-            input=messages,
-        )
-
-        # Extract the response text
-        gpt_response = response.output_text
-        logger.info(f"Received response from OpenAI: {gpt_response}")
-
-        # Store the bot's response in the database
-        store_message(thread_ts, channel, bot_user_id, gpt_response, "assistant")
-
-        # Send the response back to the Slack channel
-        client.chat_postMessage(
-            channel=channel,
-            text=gpt_response,
-            thread_ts=thread_ts  # Reply in the thread
-        )
-        logger.info(f"Message sent successfully to channel {channel}")
-
-    except Exception as e:
-        logger.error(f"Error handling app_mention event: {e}")
-        client.chat_postMessage(channel=channel, text="Sorry, something went wrong.")
-
+    logger.info("Handling app_mention event")
+    process_event(event, client, logger, is_direct_message=False)
 
 @app.event("message")
 def handle_message_events(event, client, logger):
-    try:
-        logger.info(f"Received message event: {event}")
-        
-        # Filter for direct messages
-        if event.get("channel_type") != "im":
-            logger.info("Ignoring non-direct message event.")
-            return
+    logger.info("Handling message event")
+    
+    # Filter for direct messages
+    if event.get("channel_type") != "im":
+        logger.info("Ignoring non-direct message event.")
+        return
 
-        # Extract the channel, user, and message text
-        channel = event["channel"]
-        user = event["user"]
-        text = event.get("text", "").strip()
-        thread_ts = event.get("thread_ts") or event["ts"]  # Use thread_ts or start a new thread
-        logger.info(f"Channel: {channel}, User: {user}, Text: {text}, Thread TS: {thread_ts}")
-
-        # Store the user's message in the database
-        store_message(thread_ts, channel, user, text, "user")
-
-        # Retrieve thread history from the database
-        messages = get_thread_history(thread_ts)
-
-        # Add the current user message to the conversation
-        messages.append({"role": "user", "content": text})
-
-        # Call OpenAI API with the conversation history
-        logger.info(f"Sending message to OpenAI with context: {messages}")
-        response = openai_client.responses.create(
-            model=OPENAI_MODEL,
-            instructions=OPENAI_INSTRUCTIONS,
-            input=messages,
-        )
-
-        # Extract the response text
-        gpt_response = response.output_text
-        logger.info(f"Received response from OpenAI: {gpt_response}")
-
-        # Store the bot's response in the database
-        store_message(thread_ts, channel, client.auth_test()["user_id"], gpt_response, "assistant")
-
-        # Send the response back to the Slack channel
-        client.chat_postMessage(
-            channel=channel,
-            text=gpt_response,
-            thread_ts=thread_ts  # Reply in the thread
-        )
-        logger.info(f"Message sent successfully to channel {channel}")
-
-    except Exception as e:
-        logger.error(f"Error handling message event: {e}")
-        client.chat_postMessage(channel=channel, text="Sorry, something went wrong.")
+    process_event(event, client, logger, is_direct_message=True)
 
 if __name__ == "__main__":
     # Run Flask app
