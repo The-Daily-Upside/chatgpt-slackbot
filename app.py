@@ -66,7 +66,7 @@ def preprocess_for_slack(text):
 
     return text
 
-def retrieve_rag_context(query_text, top_k=15):
+def retrieve_rag_context(query_text, top_k=7):
     """
     Retrieve the top-k most relevant documents from Chroma.
     """
