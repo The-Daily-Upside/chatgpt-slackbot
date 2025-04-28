@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(
