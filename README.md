@@ -9,6 +9,7 @@ The ChatGPT Slackbot is an internal tool developed for **[The Daily Upside](http
 - **Slack Integration**: Seamlessly interact with ChatGPT in Slack channels and direct messages.
 - **Threaded Conversations**: Keeps messages and responses in a Slack thread for better organization and context.
 - **Message Persistence**: Stores messages and responses in a managed database, allowing the bot to use previous messages in the thread for context in subsequent responses.
+- **Data Privacy**: Uses `user=user` when calling the OpenAI API to ensure data is not used for retraining.
 - **Database Integration**: Stores configurations, logs, and conversation history in a managed database.
 
 ## Deployment Instructions
@@ -18,7 +19,6 @@ The ChatGPT Slackbot is an internal tool developed for **[The Daily Upside](http
 - Access to your Slack Bot Token and OpenAI API Key.
 - A PostgreSQL database.
 - A server that can run a Flask app.
-- A PostgreSQL database.
 
 ### Setup Steps
 

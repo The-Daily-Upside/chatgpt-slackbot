@@ -154,6 +154,7 @@ def process_event(event, say, logger, is_direct_message=False):
             model=OPENAI_MODEL,
             instructions=OPENAI_INSTRUCTIONS,
             input=messages,
+            user=user  # Ensure data is not used for retraining
         )
 
         # Extract the response text
