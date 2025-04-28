@@ -83,6 +83,15 @@ def get_thread_history(thread_ts):
     conn.close()
     return [{"role": row["role"], "content": row["message"]} for row in messages]
 
+def preprocess_for_slack(text):
+    """
+    Preprocess text to ensure it uses Slack's Markdown syntax.
+    """
+    # Replace Markdown-style bold with Slack-style bold
+    text = text.replace("**", "*")  # Convert **bold** to *bold*
+    text = text.replace("__", "_")  # Convert __italic__ to _italic_
+    return text
+
 # Initialize Slack app
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
@@ -102,7 +111,7 @@ def slack_events():
     # Handle other events
     return handler.handle(request)
 
-def process_event(event, client, logger, is_direct_message=False):
+def process_event(event, say, logger, is_direct_message=False):
     try:
         logger.info(f"Processing event: {event}")
 
@@ -115,7 +124,7 @@ def process_event(event, client, logger, is_direct_message=False):
 
         # If it's not a direct message, remove the bot mention
         if not is_direct_message:
-            bot_user_id = client.auth_test()["user_id"]
+            bot_user_id = app.client.auth_test()["user_id"]
             text = text.replace(f"<@{bot_user_id}>", "").strip()
             logger.info(f"Processed text after removing bot mention: {text}")
 
@@ -140,13 +149,17 @@ def process_event(event, client, logger, is_direct_message=False):
         gpt_response = response.output_text
         logger.info(f"Received response from OpenAI: {gpt_response}")
 
+        # Preprocess the response for Slack Markdown
+        gpt_response = preprocess_for_slack(gpt_response)
+
         # Store the bot's response in the database
-        bot_user_id = client.auth_test()["user_id"]
+        bot_user_id = app.client.auth_test()["user_id"]
         store_message(thread_ts, channel, bot_user_id, gpt_response, "assistant")
 
-        # Format the response using Slack's Block Kit
-        formatted_response = {
-            "blocks": [
+        # Send the formatted response back to the Slack channel
+        say(
+            text=gpt_response,  # Fallback text
+            blocks=[
                 {
                     "type": "section",
                     "text": {
@@ -154,29 +167,23 @@ def process_event(event, client, logger, is_direct_message=False):
                         "text": gpt_response  # OpenAI's response as Markdown
                     }
                 }
-            ]
-        }
-
-        # Send the formatted response back to the Slack channel
-        client.chat_postMessage(
-            channel=channel,
-            blocks=formatted_response["blocks"],  # Use the formatted blocks
+            ],
             thread_ts=thread_ts  # Reply in the thread
         )
         logger.info(f"Message sent successfully to channel {channel}")
 
     except Exception as e:
         logger.error(f"Error processing event: {e}")
-        client.chat_postMessage(channel=event["channel"], text="Sorry, something went wrong.")
+        say(text="Sorry, something went wrong.")
 
 # Event listener for app mentions
 @app.event("app_mention")
-def handle_app_mention_events(event, client, logger):
+def handle_app_mention_events(event, say, logger):
     logger.info("Handling app_mention event")
-    process_event(event, client, logger, is_direct_message=False)
+    process_event(event, say, logger, is_direct_message=False)
 
 @app.event("message")
-def handle_message_events(event, client, logger):
+def handle_message_events(event, say, logger):
     logger.info("Handling message event")
     
     # Filter for direct messages
@@ -184,7 +191,7 @@ def handle_message_events(event, client, logger):
         logger.info("Ignoring non-direct message event.")
         return
 
-    process_event(event, client, logger, is_direct_message=True)
+    process_event(event, say, logger, is_direct_message=True)
 
 if __name__ == "__main__":
     # Run Flask app
