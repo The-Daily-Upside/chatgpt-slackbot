@@ -8,6 +8,9 @@ from openai import OpenAI
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import re
+from chromadb.config import Settings
+import chromadb
+from chromadb.utils import embedding_functions
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +35,27 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # Default to gpt-4o if not set
 OPENAI_INSTRUCTIONS = os.getenv("OPENAI_INSTRUCTIONS", "You are a helpful assistant.")  # Default instructions
+OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
+
+# Configure Chroma to use PostgreSQL as the backend
+chroma_client = chromadb.Client(
+    Settings(
+        chroma_db_impl="postgres",
+        postgres_connection_string=DATABASE_URL
+    )
+)
+
+# Set embedding function (OpenAI Embedding)
+embedding_fn = embedding_functions.OpenAIEmbeddingFunction(
+    api_key=OPENAI_API_KEY,
+    model_name=OPENAI_EMBEDDING_MODEL
+)
+
+# Initialize or retrieve the 'examples' collection
+try:
+    rag_collection = chroma_client.get_collection(name="rag", embedding_function=embedding_fn)
+except:
+    rag_collection = chroma_client.create_collection(name="rag", embedding_function=embedding_fn)
 
 # Initialize OpenAI client
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -103,6 +127,17 @@ def preprocess_for_slack(text):
 
     return text
 
+def retrieve_rag_context(query_text, top_k=15):
+    """
+    Retrieve the top-k most relevant documents from Chroma.
+    """
+    results = rag_collection.query(
+        query_texts=[query_text],
+        n_results=top_k
+    )
+    documents = results['documents'][0]  # Flatten from [[...]]
+    return documents
+
 # Initialize Slack app
 app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 
@@ -126,61 +161,56 @@ def process_event(event, say, logger, is_direct_message=False):
     try:
         logger.info(f"Processing event: {event}")
 
-        # Extract the channel, user, and message text
         channel = event["channel"]
         user = event["user"]
         text = event.get("text", "").strip()
-        thread_ts = event.get("thread_ts") or event["ts"]  # Use thread_ts or start a new thread
+        thread_ts = event.get("thread_ts") or event["ts"]
         logger.info(f"Channel: {channel}, User: {user}, Text: {text}, Thread TS: {thread_ts}")
 
-        # If it's not a direct message, remove the bot mention
         if not is_direct_message:
             bot_user_id = app.client.auth_test()["user_id"]
             text = text.replace(f"<@{bot_user_id}>", "").strip()
             logger.info(f"Processed text after removing bot mention: {text}")
 
-        # Store the user's message in the database
         store_message(thread_ts, channel, user, text, "user")
 
-        # Retrieve thread history from the database
-        messages = get_thread_history(thread_ts)
+        # Retrieve RAG context from Chroma
+        rag_contexts = retrieve_rag_context(text, top_k=15)
+        context_message = {
+            "role": "system",
+            "content": "Here are relevant examples to consider:\n\n" + "\n\n".join(rag_contexts)
+        }
 
-        # Add the current user message to the conversation
+        messages = [context_message] + get_thread_history(thread_ts)
         messages.append({"role": "user", "content": text})
 
-        # Call OpenAI API with the conversation history
         logger.info(f"Sending message to OpenAI with context: {messages}")
-        response = openai_client.responses.create(
+        response = openai_client.chat.completions.create(
             model=OPENAI_MODEL,
-            instructions=OPENAI_INSTRUCTIONS,
-            input=messages,
-            user=user  # Ensure data is not used for retraining
+            messages=messages,
+            user=user
         )
 
-        # Extract the response text
-        gpt_response = response.output_text
+        gpt_response = response.choices[0].message.content
         logger.info(f"Received response from OpenAI: {gpt_response}")
 
-        # Preprocess the response for Slack Markdown
         gpt_response = preprocess_for_slack(gpt_response)
 
-        # Store the bot's response in the database
         bot_user_id = app.client.auth_test()["user_id"]
         store_message(thread_ts, channel, bot_user_id, gpt_response, "assistant")
 
-        # Send the formatted response back to the Slack channel
         say(
-            text=gpt_response,  # Fallback text
+            text=gpt_response,
             blocks=[
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": gpt_response  # OpenAI's response as Markdown
+                        "text": gpt_response
                     }
                 }
             ],
-            thread_ts=thread_ts  # Reply in the thread
+            thread_ts=thread_ts
         )
         logger.info(f"Message sent successfully to channel {channel}")
 
