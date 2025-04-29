@@ -124,7 +124,6 @@ def process_event(event, say, logger, is_direct_message=False):
         logger.info(f"Sending message to OpenAI with context: {messages}")
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL,
-            tools=[{ "type": "web_search_preview" }],
             messages=messages,
             user=user  # Ensure data is not used for retraining
         )
