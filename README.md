@@ -12,6 +12,10 @@ The ChatGPT Slackbot is an internal tool developed for **[The Daily Upside](http
 - **Data Privacy**: Uses `user=user` when calling the OpenAI API to ensure data is not used for retraining.
 - **Database Integration**: Stores configurations, logs, and conversation history in a managed database.
 
+## Custom RAG Implementation
+
+If you want to use a custom Retrieval-Augmented Generation (RAG) with this bot, the `rag` branch includes an implementation using Chroma and embeddings.
+
 ## Deployment Instructions
 
 ### Prerequisites
