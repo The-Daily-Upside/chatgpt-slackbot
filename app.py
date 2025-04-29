@@ -153,6 +153,7 @@ def process_event(event, say, logger, is_direct_message=False):
         response = openai_client.responses.create(
             model=OPENAI_MODEL,
             instructions=OPENAI_INSTRUCTIONS,
+            tools=[{ "type": "web_search_preview" }],
             input=messages,
             user=user  # Ensure data is not used for retraining
         )
