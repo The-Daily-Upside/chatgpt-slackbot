@@ -31,7 +31,6 @@ PORT = int(os.getenv("PORT", 3000))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")  # Default to gpt-4o if not set
 OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
-OPENAI_INSTRUCTIONS = os.getenv("OPENAI_INSTRUCTIONS", "You are a helpful assistant. Answer the user's questions based on the provided context and your knowledge.")
 
 # Setup Chroma client (New architecture)
 chroma_client = chromadb.PersistentClient(path="./chroma_data")  
@@ -125,7 +124,6 @@ def process_event(event, say, logger, is_direct_message=False):
         logger.info(f"Sending message to OpenAI with context: {messages}")
         response = openai_client.chat.completions.create(
             model=OPENAI_MODEL,
-            instructions=OPENAI_INSTRUCTIONS,
             tools=[{ "type": "web_search_preview" }],
             messages=messages,
             user=user  # Ensure data is not used for retraining
