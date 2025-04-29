@@ -173,3 +173,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 knowledge_for_rag.csv
+chroma_data
